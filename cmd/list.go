@@ -23,7 +23,11 @@ var listCmd = &cobra.Command{
 		}
 		fmt.Println("Tasks:")
 		for i, task := range tasks {
-			fmt.Printf("%d: %s\n", i+1, task.Value)
+			var tick string = " "
+			if task.Value.Complete {
+				tick = "X"
+			}
+			fmt.Printf("%d: [%s] %s\n", i+1, tick, task.Value.Text)
 		}
 	},
 }

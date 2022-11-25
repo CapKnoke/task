@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -11,9 +12,14 @@ var taskBucket = []byte("tasks")
 
 var db *bolt.DB
 
+type TaskObj struct {
+	Text     string `json:"text"`
+	Complete bool   `json:"complete"`
+}
+
 type Task struct {
 	Key   int
-	Value string
+	Value TaskObj
 }
 
 func itob(v int) []byte {
@@ -40,12 +46,20 @@ func Init(dbPath string) error {
 
 func CreateTask(task string) (int, error) {
 	var id int
+	taskObj := &TaskObj{
+		Text:     task,
+		Complete: false,
+	}
+	data, jsonErr := json.Marshal(taskObj)
+	if jsonErr != nil {
+		return -1, jsonErr
+	}
 	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(taskBucket)
 		id64, _ := b.NextSequence()
 		id = int(id64)
 		key := itob(id)
-		return b.Put(key, []byte(task))
+		return b.Put(key, data)
 	})
 	if err != nil {
 		return -1, err
@@ -60,9 +74,14 @@ func AllTasks() ([]Task, error) {
 		c := b.Cursor()
 
 		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var task TaskObj
+			err := json.Unmarshal(v, &task)
+			if err != nil {
+				return err
+			}
 			tasks = append(tasks, Task{
 				Key:   btoi(k),
-				Value: string(v),
+				Value: task,
 			})
 		}
 		return nil
@@ -71,6 +90,25 @@ func AllTasks() ([]Task, error) {
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func DoTask(key int) error {
+	return db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(taskBucket)
+		v := b.Get(itob(key))
+		var task TaskObj
+		err := json.Unmarshal(v, &task)
+		if err != nil {
+			return err
+		}
+		task.Complete = true
+		data, err := json.Marshal(task)
+		if err != nil {
+			return err
+		}
+		b.Put(itob(key), data)
+		return nil
+	})
 }
 
 func DeleteTask(key int) error {
